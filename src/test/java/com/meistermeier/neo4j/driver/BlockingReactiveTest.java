@@ -36,25 +36,22 @@ public class BlockingReactiveTest {
 		String cypher2 = "MATCH (n) WHERE elementId(n) = $elementId RETURN elementId(n) as b";
 
 		StepVerifier.create(Flux.usingWhen(
-						Mono
-								.just(driver.session(ReactiveSession.class)),
-						session ->
-								Flux.from(session.run(cypher))
-										.flatMap(a -> a.records())
-										.map(a -> a.get(0).asString())
-										.flatMap(elementId -> {
-											return Flux.usingWhen(Mono.just(driver.session(ReactiveSession.class)),
-													innerSession -> {
-														return Flux.from(innerSession.run(cypher2, Map.of("elementId", elementId)))
-																.flatMap(result -> result.records())
-																.map(result -> result.get(0).asString())
-																.doOnNext(returnedElementId -> System.out.println("elementId is " + returnedElementId));
-													},
-													innerSession -> Mono.fromDirect(innerSession.close())
-											);
-										}),
-						session -> Mono.fromDirect(session.close())))
-				.expectNextCount(100)
-				.verifyComplete();
+				Mono.just(driver.session(ReactiveSession.class)),
+				session ->
+					Flux.from(session.run(cypher))
+						.flatMap(a -> a.records())
+						.map(a -> a.get(0).asString())
+						.flatMap(elementId ->
+							Flux.usingWhen(Mono.just(driver.session(ReactiveSession.class)),
+								innerSession ->
+									Flux.from(innerSession.run(cypher2, Map.of("elementId", elementId)))
+										.flatMap(result -> result.records())
+										.map(result -> result.get(0).asString())
+										.doOnNext(returnedElementId -> System.out.println("elementId is " + returnedElementId)),
+								innerSession -> Mono.fromDirect(innerSession.close())
+							)),
+				session -> Mono.fromDirect(session.close())))
+			.expectNextCount(100)
+			.verifyComplete();
 	}
 }
